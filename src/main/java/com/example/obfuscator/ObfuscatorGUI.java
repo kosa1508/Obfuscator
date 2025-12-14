@@ -7,6 +7,8 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.nio.file.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -57,13 +59,21 @@ public class ObfuscatorGUI extends JFrame {
     // Метрики обфускации
     private ObfuscationMetrics currentMetrics;
 
+    // Логгер
+    private CustomLogger logger;
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public ObfuscatorGUI() {
+        initLogger(); // Инициализируем логгер
         initComponents();
         setupLayout();
         setupListeners();
         setupFrame();
+    }
+
+    private void initLogger() {
+        logger = new CustomLogger();
     }
 
     private void initComponents() {
@@ -395,10 +405,12 @@ public class ObfuscatorGUI extends JFrame {
 
         tabbedPane.addTab("📝 Обфускация", mainPanel);
         tabbedPane.addTab("📊 Метрики", createMetricsPanel());
+        tabbedPane.addTab("📋 О логах", createLogsInfoPanel());
 
         // Устанавливаем фон только для существующих вкладок
         tabbedPane.setBackgroundAt(0, Color.WHITE);
         tabbedPane.setBackgroundAt(1, Color.WHITE);
+        tabbedPane.setBackgroundAt(2, Color.WHITE);
 
         // Главный сплиттер
         JSplitPane mainSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tabbedPane, logPanel);
@@ -469,6 +481,63 @@ public class ObfuscatorGUI extends JFrame {
         return panel;
     }
 
+    private JPanel createLogsInfoPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(Color.WHITE);
+
+        JTextPane logsInfo = new JTextPane();
+        logsInfo.setContentType("text/html");
+        logsInfo.setText("<html><body style='font-family: Segoe UI; font-size: 13pt; padding: 20px;'>"
+                + "<h2 style='color: #2980b9;'>📋 СИСТЕМА ЛОГИРОВАНИЯ</h2>"
+                + "<hr style='border: 1px solid #3498db;'>"
+                + "<h3 style='color: #27ae60;'>🎯 Функции логгера:</h3>"
+                + "<ul>"
+                + "<li><b>Реальное время:</b> Логи выводятся сразу в интерфейс</li>"
+                + "<li><b>Сохранение в файл:</b> Автоматическое сохранение в папку logs</li>"
+                + "<li><b>Фильтрация:</b> Разные уровни логирования (инфо, ошибки, предупреждения)</li>"
+                + "<li><b>Очистка:</b> Можно очистить логи в памяти и в файлах</li>"
+                + "</ul>"
+                + "<h3 style='color: #e74c3c;'>🔧 Использование:</h3>"
+                + "<ul>"
+                + "<li><b>🗑️ Очистить логи:</b> Удаляет все логи из памяти и интерфейса</li>"
+                + "<li><b>💾 Сохранить логи:</b> Сохраняет текущие логи в файл</li>"
+                + "<li><b>👁️ Показать логи:</b> Открывает папку с сохраненными логами</li>"
+                + "<li><b>📊 Уровень логов:</b> Фильтрует отображаемые сообщения</li>"
+                + "</ul>"
+                + "<h3 style='color: #9b59b6;'>📁 Расположение логов:</h3>"
+                + "<p>Логи сохраняются в папке <b>logs</b> рядом с программой.</p>"
+                + "<p>Файлы именуются по шаблону: <i>obfuscation_ГГГГ-ММ-ДД_ЧЧ-мм-сс.log</i></p>"
+                + "</body></html>");
+        logsInfo.setEditable(false);
+        logsInfo.setBackground(new Color(240, 248, 255));
+        logsInfo.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        // Кнопка для тестирования логгера
+        JButton testLoggerButton = createStyledButton("🧪 Тест логгера", INFO_COLOR);
+        testLoggerButton.addActionListener(e -> {
+            logger.info("Тестовое информационное сообщение");
+            logger.success("Тестовое сообщение об успехе");
+            logger.warning("Тестовое предупреждение");
+            logger.error("Тестовая ошибка");
+            logger.debug("Тестовое отладочное сообщение");
+
+            JOptionPane.showMessageDialog(this,
+                    "Тестовые сообщения добавлены в лог!\n" +
+                            "Проверьте область логов внизу окна.",
+                    "Тест логгера",
+                    JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 15));
+        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.add(testLoggerButton);
+
+        panel.add(new JScrollPane(logsInfo), BorderLayout.CENTER);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
     private void setupListeners() {
         // Кнопка обфускации
         obfuscateButton.addActionListener(e -> startObfuscation());
@@ -477,18 +546,14 @@ public class ObfuscatorGUI extends JFrame {
         clearButton.addActionListener(e -> {
             inputTextArea.setText("");
             outputTextArea.setText("");
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().clear();
-            }
+            logger.clear();
             metricsButton.setEnabled(false);
             currentMetrics = null;
             statusLabel.setText("✅ Очищено");
             statusLabel.setForeground(SUCCESS_COLOR);
             progressBar.setValue(0);
             progressBar.setString("Готов");
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().info("Очищены все поля");
-            }
+            logger.info("Очищены все поля");
         });
 
         // Кнопка загрузки файла
@@ -499,42 +564,57 @@ public class ObfuscatorGUI extends JFrame {
 
         // Чекбокс ASM обфускации (не зависит от выбора AST метода)
         enableAsmObfuscationCheckBox.addActionListener(e -> {
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().info("ASM обфускация (байт-код): " +
-                        (enableAsmObfuscationCheckBox.isSelected() ? "включена" : "отключена"));
-            }
+            logger.info("ASM обфускация (байт-код): " +
+                    (enableAsmObfuscationCheckBox.isSelected() ? "включена" : "отключена"));
         });
 
         // Управление логами
         clearLogsButton.addActionListener(e -> {
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().clear();
-                Logger.getInstance().info("Логи очищены");
-            }
+            logger.clear();
+            logger.info("Логи очищены");
         });
 
         saveLogsButton.addActionListener(e -> {
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().saveLogToFile();
+            if (logger.saveToFile()) {
+                logger.success("Логи успешно сохранены в файл");
             }
         });
 
         viewLogsButton.addActionListener(e -> {
-            try {
-                Desktop.getDesktop().open(new File("logs"));
-            } catch (IOException ex) {
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().error("Не удалось открыть папку с логами: " + ex.getMessage());
+            File logsDir = new File("logs");
+            if (!logsDir.exists()) {
+                boolean created = logsDir.mkdirs();
+                if (created) {
+                    logger.info("Создана папка logs: " + logsDir.getAbsolutePath());
                 }
+            }
+
+            if (logsDir.exists() && logsDir.isDirectory()) {
+                try {
+                    Desktop.getDesktop().open(logsDir);
+                    logger.info("Открыта папка с логами: " + logsDir.getAbsolutePath());
+                } catch (IOException ex) {
+                    logger.error("Не удалось открыть папку logs: " + ex.getMessage());
+                    JOptionPane.showMessageDialog(ObfuscatorGUI.this,
+                            "Не удалось открыть папку logs:\n" + ex.getMessage() +
+                                    "\n\nПапка находится по пути: " + logsDir.getAbsolutePath(),
+                            "Ошибка",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                logger.error("Папка logs не существует или недоступна");
+                JOptionPane.showMessageDialog(ObfuscatorGUI.this,
+                        "Папка logs не существует или недоступна!",
+                        "Ошибка",
+                        JOptionPane.ERROR_MESSAGE);
             }
         });
 
         // Выбор уровня логов
         logLevelComboBox.addActionListener(e -> {
             String selected = (String) logLevelComboBox.getSelectedItem();
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().info("Уровень логов изменен на: " + selected);
-            }
+            logger.setLogLevel(selected);
+            logger.info("Уровень логов изменен на: " + selected);
         });
 
         // Горячие клавиши
@@ -612,6 +692,12 @@ public class ObfuscatorGUI extends JFrame {
 
         // Делаем окно красивым
         getRootPane().setBorder(BorderFactory.createLineBorder(PRIMARY_COLOR, 3));
+
+        // Связываем логгер с текстовой областью
+        logger.setLogArea(logTextArea);
+
+        // Логируем запуск приложения
+        logger.info("🚀 Java Obfuscator Pro запущен");
     }
 
     private Image createAppIcon() {
@@ -667,9 +753,7 @@ public class ObfuscatorGUI extends JFrame {
         String sourceCode = inputTextArea.getText().trim();
 
         if (sourceCode.isEmpty()) {
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().error("Не введен код для обфускации!");
-            }
+            logger.error("Не введен код для обфускации!");
             JOptionPane.showMessageDialog(this,
                     "Введите Java код для обфускации!",
                     "Ошибка",
@@ -682,16 +766,15 @@ public class ObfuscatorGUI extends JFrame {
         progressBar.setVisible(true);
         progressBar.setValue(0);
         progressBar.setString("Начинаем...");
-        if (Logger.getInstance() != null) {
-            Logger.getInstance().clear();
-            Logger.getInstance().info("🎯 === НАЧАЛО СЕАНСА ОБФУСКАЦИИ ===");
-            Logger.getInstance().info("⚙️ Настройки обфускации:");
-            Logger.getInstance().info("   🔄 Обфускация циклов: " + enableLoopObfuscationCheckBox.isSelected());
-            Logger.getInstance().info("   ⚙️ ASM обфускация (байт-код): " + enableAsmObfuscationCheckBox.isSelected());
-            // Логируем выбранный метод AST обфускации
-            String selectedMethod = (String) astMethodComboBox.getSelectedItem();
-            Logger.getInstance().info("   🌳 Метод AST обфускации: " + selectedMethod);
-        }
+        logger.clear();
+        logger.info("🎯 === НАЧАЛО СЕАНСА ОБФУСКАЦИИ ===");
+        logger.info("⚙️ Настройки обфускации:");
+        logger.info("   🔄 Обфускация циклов: " + enableLoopObfuscationCheckBox.isSelected());
+        logger.info("   ⚙️ ASM обфускация (байт-код): " + enableAsmObfuscationCheckBox.isSelected());
+        // Логируем выбранный метод AST обфускации
+        String selectedMethod = (String) astMethodComboBox.getSelectedItem();
+        logger.info("   🌳 Метод AST обфускации: " + selectedMethod);
+
         statusLabel.setText("⏳ Начинаем обфускацию...");
         statusLabel.setForeground(PRIMARY_COLOR);
 
@@ -702,50 +785,38 @@ public class ObfuscatorGUI extends JFrame {
                 progressBar.setValue(5);
                 progressBar.setString("Анализ кода...");
                 statusLabel.setText("🔍 Анализируем исходный код...");
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().info("📊 === АНАЛИЗ ИСХОДНОГО КОДА ===");
-                }
+                logger.info("📊 === АНАЛИЗ ИСХОДНОГО КОДА ===");
 
                 ObfuscationMetrics.Metrics originalSourceMetrics =
                         ObfuscationMetrics.calculateSourceCodeMetrics(sourceCode);
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().success("✅ Рассчитаны метрики исходного кода");
-                    Logger.getInstance().info("   📏 Строк кода: " + originalSourceMetrics.getLinesOfCode());
-                    Logger.getInstance().info("   🛠️ Методов: " + originalSourceMetrics.getNumberOfMethods());
-                    Logger.getInstance().info("   🧮 Цикломатическая сложность: " + originalSourceMetrics.getCyclomaticComplexity());
-                }
+                logger.success("✅ Рассчитаны метрики исходного кода");
+                logger.info("   📏 Строк кода: " + originalSourceMetrics.getLinesOfCode());
+                logger.info("   🛠️ Методов: " + originalSourceMetrics.getNumberOfMethods());
+                logger.info("   🧮 Цикломатическая сложность: " + originalSourceMetrics.getCyclomaticComplexity());
 
                 // Шаг 1: Сохраняем код во временный файл
                 progressBar.setValue(10);
                 progressBar.setString("Подготовка...");
                 statusLabel.setText("📁 Создаем временный файл...");
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().info("📦 === ПОДГОТОВКА К ОБФУСКАЦИИ ===");
-                    Logger.getInstance().info("📝 Создаем временный файл...");
-                }
+                logger.info("📦 === ПОДГОТОВКА К ОБФУСКАЦИИ ===");
+                logger.info("📝 Создаем временный файл...");
 
                 Path tempDir = Files.createTempDirectory("obfuscator_");
                 Path inputFile = tempDir.resolve("InputClass.java");
                 Files.write(inputFile, sourceCode.getBytes());
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().success("✅ Создан временный файл: " + inputFile);
-                }
+                logger.success("✅ Создан временный файл: " + inputFile);
 
                 // Шаг 2: AST обфускация (всегда выполняется)
                 progressBar.setValue(30);
                 progressBar.setString("AST обфускация...");
                 statusLabel.setText("🌳 Выполняем AST обфускацию...");
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().info("🔄 [1/2] Применяем AST-обфускацию...");
-                }
+                logger.info("🔄 [1/2] Применяем AST-обфускацию...");
 
                 SimpleObfuscator simpleObf = new SimpleObfuscator();
                 SimpleObfuscator.Result astResult = simpleObf.obfuscate(inputFile.toString());
 
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().success("✅ AST-обфускация завершена");
-                    Logger.getInstance().info("   🏷️ Имя класса: " + astResult.className);
-                }
+                logger.success("✅ AST-обфускация завершена");
+                logger.info("   🏷️ Имя класса: " + astResult.className);
 
                 Path javaFilePath = tempDir.resolve(astResult.className + ".java");
                 Files.write(javaFilePath, astResult.source.getBytes());
@@ -770,9 +841,7 @@ public class ObfuscatorGUI extends JFrame {
                     progressBar.setValue(60);
                     progressBar.setString("Компиляция...");
                     statusLabel.setText("⚙️ Компилируем код...");
-                    if (Logger.getInstance() != null) {
-                        Logger.getInstance().info("🔧 [2/2] Компилируем и применяем ASM-обфускацию...");
-                    }
+                    logger.info("🔧 [2/2] Компилируем и применяем ASM-обфускацию...");
 
                     try {
                         ProcessBuilder javacBuilder = new ProcessBuilder(
@@ -787,24 +856,18 @@ public class ObfuscatorGUI extends JFrame {
                         int code = javac.waitFor();
 
                         if (code != 0) {
-                            if (Logger.getInstance() != null) {
-                                Logger.getInstance().error("❌ Ошибка компиляции:");
-                                Logger.getInstance().error(output.substring(0, Math.min(output.length(), 500)));
-                            }
+                            logger.error("❌ Ошибка компиляции:");
+                            logger.error(output.substring(0, Math.min(output.length(), 500)));
                             throw new RuntimeException("Ошибка компиляции");
                         }
 
-                        if (Logger.getInstance() != null) {
-                            Logger.getInstance().success("✅ Компиляция успешна");
-                        }
+                        logger.success("✅ Компиляция успешна");
 
                         // Шаг 4: ASM обфускация байт-кода
                         progressBar.setValue(80);
                         progressBar.setString("ASM обфускация...");
                         statusLabel.setText("🔧 Выполняем ASM обфускацию байт-кода...");
-                        if (Logger.getInstance() != null) {
-                            Logger.getInstance().info("🔬 Применяем ASM-обфускацию байт-кода...");
-                        }
+                        logger.info("🔬 Применяем ASM-обфускацию байт-кода...");
 
                         Path classFile = tempDir.resolve(astResult.className + ".class");
                         if (Files.exists(classFile)) {
@@ -819,9 +882,7 @@ public class ObfuscatorGUI extends JFrame {
                             // Всегда используем базовый метод ASM обфускации
                             asmObf.obfuscateClass(classFile, asmClassFile);
 
-                            if (Logger.getInstance() != null) {
-                                Logger.getInstance().success("✅ ASM-обфускация байт-кода завершена");
-                            }
+                            logger.success("✅ ASM-обфускация байт-кода завершена");
 
                             // Рассчитываем метрики обфусцированного байт-кода
                             ObfuscationMetrics.Metrics obfuscatedBytecodeMetrics =
@@ -842,19 +903,15 @@ public class ObfuscatorGUI extends JFrame {
                             currentMetrics.getObfuscatedMetrics().setConstantPoolSize(
                                     obfuscatedBytecodeMetrics.getConstantPoolSize());
 
-                            if (Logger.getInstance() != null) {
-                                Logger.getInstance().info("   📏 Размер файла: " + originalBytecodeMetrics.getFileSizeBytes() +
-                                        " → " + obfuscatedBytecodeMetrics.getFileSizeBytes() + " байт");
-                                Logger.getInstance().info("   🧩 Инструкций байт-кода: " + originalBytecodeMetrics.getBytecodeInstructions() +
-                                        " → " + obfuscatedBytecodeMetrics.getBytecodeInstructions());
-                                Logger.getInstance().info("   💾 Создан файл: " + asmClassFile);
-                            }
+                            logger.info("   📏 Размер файла: " + originalBytecodeMetrics.getFileSizeBytes() +
+                                    " → " + obfuscatedBytecodeMetrics.getFileSizeBytes() + " байт");
+                            logger.info("   🧩 Инструкций байт-кода: " + originalBytecodeMetrics.getBytecodeInstructions() +
+                                    " → " + obfuscatedBytecodeMetrics.getBytecodeInstructions());
+                            logger.info("   💾 Создан файл: " + asmClassFile);
                         }
                     } catch (Exception e) {
-                        if (Logger.getInstance() != null) {
-                            Logger.getInstance().warning("⚠️ ASM обфускация пропущена: " + e.getMessage());
-                            Logger.getInstance().debug("Детали ошибки: " + e.getMessage());
-                        }
+                        logger.warning("⚠️ ASM обфускация пропущена: " + e.getMessage());
+                        logger.debug("Детали ошибки: " + e.getMessage());
                     }
                 }
 
@@ -862,22 +919,18 @@ public class ObfuscatorGUI extends JFrame {
                 progressBar.setValue(95);
                 progressBar.setString("Генерация отчета...");
                 statusLabel.setText("📊 Генерируем отчет...");
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().info("📈 === ФИНАЛЬНЫЙ ОТЧЕТ ===");
-                }
+                logger.info("📈 === ФИНАЛЬНЫЙ ОТЧЕТ ===");
 
-                if (Logger.getInstance() != null && currentMetrics != null) {
+                if (currentMetrics != null) {
                     String metricsReport = currentMetrics.getReport();
-                    Logger.getInstance().info(metricsReport);
+                    logger.info(metricsReport);
                 }
 
                 progressBar.setValue(100);
                 progressBar.setString("Готово!");
                 statusLabel.setText("✅ Обфускация завершена успешно!");
                 statusLabel.setForeground(SUCCESS_COLOR);
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().success("🎉 === ОБФУСКАЦИЯ УСПЕШНО ЗАВЕРШЕНА ===");
-                }
+                logger.success("🎉 === ОБФУСКАЦИЯ УСПЕШНО ЗАВЕРШЕНА ===");
 
                 // Показываем диалог с отчетом
                 SwingUtilities.invokeLater(() -> {
@@ -912,23 +965,17 @@ public class ObfuscatorGUI extends JFrame {
                                 try { Files.delete(path); }
                                 catch (IOException e) { /* Игнорируем */ }
                             });
-                    if (Logger.getInstance() != null) {
-                        Logger.getInstance().debug("🧹 Временные файлы очищены");
-                    }
+                    logger.debug("🧹 Временные файлы очищены");
                 } catch (IOException e) {
-                    if (Logger.getInstance() != null) {
-                        Logger.getInstance().warning("⚠️ Ошибка при удалении временных файлов: " + e.getMessage());
-                    }
+                    logger.warning("⚠️ Ошибка при удалении временных файлов: " + e.getMessage());
                 }
 
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
                     statusLabel.setText("❌ Ошибка: " + e.getMessage());
                     statusLabel.setForeground(ACCENT_COLOR);
-                    if (Logger.getInstance() != null) {
-                        Logger.getInstance().error("💥 ОШИБКА: " + e.getMessage());
-                        Logger.getInstance().debug("Детали ошибки: " + e.getMessage());
-                    }
+                    logger.error("💥 ОШИБКА: " + e.getMessage());
+                    logger.debug("Детали ошибки: " + e.getMessage());
                     setControlsEnabled(true);
                     progressBar.setVisible(false);
                     progressBar.setString("Ошибка!");
@@ -1062,9 +1109,7 @@ public class ObfuscatorGUI extends JFrame {
                 inputTextArea.setCaretPosition(0);
                 statusLabel.setText("📂 Загружен файл: " + fileChooser.getSelectedFile().getName());
                 statusLabel.setForeground(SUCCESS_COLOR);
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().success("✅ Загружен файл: " + fileChooser.getSelectedFile().getName());
-                }
+                logger.success("✅ Загружен файл: " + fileChooser.getSelectedFile().getName());
 
                 // Подсветка успешной загрузки
                 inputTextArea.setBackground(new Color(230, 255, 230));
@@ -1075,9 +1120,7 @@ public class ObfuscatorGUI extends JFrame {
                 timer.start();
 
             } catch (IOException e) {
-                if (Logger.getInstance() != null) {
-                    Logger.getInstance().error("❌ Ошибка загрузки файла: " + e.getMessage());
-                }
+                logger.error("❌ Ошибка загрузки файла: " + e.getMessage());
                 JOptionPane.showMessageDialog(this,
                         "❌ Ошибка загрузки файла:\n" + e.getMessage(),
                         "💥 Ошибка",
@@ -1136,9 +1179,100 @@ public class ObfuscatorGUI extends JFrame {
         SwingUtilities.invokeLater(() -> {
             ObfuscatorGUI gui = new ObfuscatorGUI();
             gui.setVisible(true);
-            if (Logger.getInstance() != null) {
-                Logger.getInstance().info("🚀 Java Obfuscator Pro запущен");
-            }
         });
+    }
+
+    // Вложенный класс для кастомного логгера
+    class CustomLogger {
+        private JTextArea logArea;
+        private StringBuilder logBuffer = new StringBuilder();
+        private String logLevel = "📊 Все логи";
+
+        public void setLogArea(JTextArea logArea) {
+            this.logArea = logArea;
+        }
+
+        public void setLogLevel(String level) {
+            this.logLevel = level;
+        }
+
+        private boolean shouldLog(String level) {
+            if (logLevel.equals("📊 Все логи")) return true;
+            if (logLevel.equals("❌ Только ошибки")) return level.equals("ERROR");
+            if (logLevel.equals("✅ Только успехи")) return level.equals("SUCCESS");
+            if (logLevel.equals("⚠️ Только предупреждения")) return level.equals("WARNING");
+            return true;
+        }
+
+        private void addLog(String message, String level, String emoji) {
+            if (!shouldLog(level)) return;
+
+            String timestamp = new SimpleDateFormat("HH:mm:ss").format(new Date());
+            String logEntry = String.format("[%s] %s %s\n", timestamp, emoji, message);
+
+            logBuffer.append(logEntry);
+
+            if (logArea != null) {
+                SwingUtilities.invokeLater(() -> {
+                    logArea.append(logEntry);
+                    // Автоскроллинг к концу
+                    logArea.setCaretPosition(logArea.getDocument().getLength());
+                });
+            }
+        }
+
+        public void info(String message) {
+            addLog(message, "INFO", "🔍");
+        }
+
+        public void success(String message) {
+            addLog(message, "SUCCESS", "✅");
+        }
+
+        public void warning(String message) {
+            addLog(message, "WARNING", "⚠️");
+        }
+
+        public void error(String message) {
+            addLog(message, "ERROR", "❌");
+        }
+
+        public void debug(String message) {
+            addLog(message, "DEBUG", "🐛");
+        }
+
+        public void clear() {
+            logBuffer.setLength(0);
+            if (logArea != null) {
+                SwingUtilities.invokeLater(() -> {
+                    logArea.setText("");
+                });
+            }
+        }
+
+        public boolean saveToFile() {
+            try {
+                File logsDir = new File("logs");
+                if (!logsDir.exists()) {
+                    logsDir.mkdirs();
+                }
+
+                String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+                File logFile = new File(logsDir, "obfuscation_" + timestamp + ".log");
+
+                try (PrintWriter writer = new PrintWriter(new FileWriter(logFile))) {
+                    writer.write("=== Логи обфускатора Java ===\n");
+                    writer.write("Дата: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "\n");
+                    writer.write("================================\n\n");
+                    writer.write(logBuffer.toString());
+                }
+
+                info("Логи сохранены в: " + logFile.getAbsolutePath());
+                return true;
+            } catch (Exception e) {
+                error("Ошибка сохранения логов: " + e.getMessage());
+                return false;
+            }
+        }
     }
 }
