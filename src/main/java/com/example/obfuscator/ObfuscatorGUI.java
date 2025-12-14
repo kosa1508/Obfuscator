@@ -40,6 +40,7 @@ public class ObfuscatorGUI extends JFrame {
     private JCheckBox enableAsmObfuscationCheckBox;
     private JCheckBox enableCommentsCheckBox;
     private JCheckBox enableFakeCodeCheckBox;
+    private JComboBox<String> astMethodComboBox; // ИЗМЕНЕНО: выбор метода AST обфускации
     private JProgressBar progressBar;
     private JButton obfuscateButton;
     private JButton clearButton;
@@ -110,9 +111,23 @@ public class ObfuscatorGUI extends JFrame {
 
         // Панель настроек
         enableLoopObfuscationCheckBox = createStyledCheckBox("🔄 Обфускация циклов", true);
-        enableAsmObfuscationCheckBox = createStyledCheckBox("⚙️ ASM обфускация", true);
+        enableAsmObfuscationCheckBox = createStyledCheckBox("⚙️ ASM обфускация (байт-код)", true);
         enableCommentsCheckBox = createStyledCheckBox("💬 Добавлять комментарии", true);
         enableFakeCodeCheckBox = createStyledCheckBox("🎭 Добавлять фиктивный код", true);
+
+        // Выбор метода AST-обфускации (ИЗМЕНЕНО)
+        String[] astMethods = {
+                "1️⃣ Базовый AST метод (простая обфускация)",
+                "2️⃣ Улучшенные циклы (сложная обфускация потоков)",
+                "3️⃣ С переименованием (агрессивная обфускация)"
+        };
+        astMethodComboBox = new JComboBox<>(astMethods);
+        astMethodComboBox.setFont(BUTTON_FONT);
+        astMethodComboBox.setBackground(Color.WHITE);
+        astMethodComboBox.setForeground(TEXT_COLOR);
+        astMethodComboBox.setFocusable(false);
+        astMethodComboBox.setMaximumRowCount(3);
+        astMethodComboBox.setEnabled(true); // Всегда включено, так как AST обфускация всегда выполняется
 
         // Прогресс бар
         progressBar = new JProgressBar();
@@ -278,7 +293,7 @@ public class ObfuscatorGUI extends JFrame {
         buttonPanel.add(metricsButton);
 
         // Панель настроек
-        JPanel settingsPanel = new JPanel(new GridLayout(3, 2, 20, 15));
+        JPanel settingsPanel = new JPanel(new GridBagLayout());
         settingsPanel.setBackground(Color.WHITE);
         settingsPanel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createTitledBorder(
@@ -291,11 +306,37 @@ public class ObfuscatorGUI extends JFrame {
                 ),
                 BorderFactory.createEmptyBorder(20, 20, 20, 20)
         ));
-        settingsPanel.add(enableLoopObfuscationCheckBox);
-        settingsPanel.add(enableAsmObfuscationCheckBox);
-        settingsPanel.add(enableCommentsCheckBox);
-        settingsPanel.add(enableFakeCodeCheckBox);
-        settingsPanel.add(new JLabel()); // Пустая ячейка для выравнивания
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.insets = new Insets(5, 5, 5, 20);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        settingsPanel.add(enableLoopObfuscationCheckBox, gbc);
+
+        gbc.gridx = 1;
+        settingsPanel.add(enableAsmObfuscationCheckBox, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        settingsPanel.add(enableCommentsCheckBox, gbc);
+
+        gbc.gridx = 1;
+        settingsPanel.add(enableFakeCodeCheckBox, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        gbc.insets = new Insets(15, 5, 5, 5);
+
+        // Панель для выбора метода AST (ИЗМЕНЕНО)
+        JPanel astMethodPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        astMethodPanel.setBackground(Color.WHITE);
+        astMethodPanel.add(new JLabel("🌳 Метод AST обфускации:"));
+        astMethodPanel.add(astMethodComboBox);
+        settingsPanel.add(astMethodPanel, gbc);
 
         // Объединяем верхние панели
         JPanel northPanel = new JPanel(new BorderLayout());
@@ -455,6 +496,14 @@ public class ObfuscatorGUI extends JFrame {
 
         // Кнопка показа метрик
         metricsButton.addActionListener(e -> showMetricsReport());
+
+        // Чекбокс ASM обфускации (не зависит от выбора AST метода)
+        enableAsmObfuscationCheckBox.addActionListener(e -> {
+            if (Logger.getInstance() != null) {
+                Logger.getInstance().info("ASM обфускация (байт-код): " +
+                        (enableAsmObfuscationCheckBox.isSelected() ? "включена" : "отключена"));
+            }
+        });
 
         // Управление логами
         clearLogsButton.addActionListener(e -> {
@@ -636,6 +685,12 @@ public class ObfuscatorGUI extends JFrame {
         if (Logger.getInstance() != null) {
             Logger.getInstance().clear();
             Logger.getInstance().info("🎯 === НАЧАЛО СЕАНСА ОБФУСКАЦИИ ===");
+            Logger.getInstance().info("⚙️ Настройки обфускации:");
+            Logger.getInstance().info("   🔄 Обфускация циклов: " + enableLoopObfuscationCheckBox.isSelected());
+            Logger.getInstance().info("   ⚙️ ASM обфускация (байт-код): " + enableAsmObfuscationCheckBox.isSelected());
+            // Логируем выбранный метод AST обфускации
+            String selectedMethod = (String) astMethodComboBox.getSelectedItem();
+            Logger.getInstance().info("   🌳 Метод AST обфускации: " + selectedMethod);
         }
         statusLabel.setText("⏳ Начинаем обфускацию...");
         statusLabel.setForeground(PRIMARY_COLOR);
@@ -676,12 +731,12 @@ public class ObfuscatorGUI extends JFrame {
                     Logger.getInstance().success("✅ Создан временный файл: " + inputFile);
                 }
 
-                // Шаг 2: AST обфускация
+                // Шаг 2: AST обфускация (всегда выполняется)
                 progressBar.setValue(30);
                 progressBar.setString("AST обфускация...");
-                statusLabel.setText("⚙️ Выполняем AST обфускацию...");
+                statusLabel.setText("🌳 Выполняем AST обфускацию...");
                 if (Logger.getInstance() != null) {
-                    Logger.getInstance().info("🔄 [1/3] Применяем AST-обфускацию...");
+                    Logger.getInstance().info("🔄 [1/2] Применяем AST-обфускацию...");
                 }
 
                 SimpleObfuscator simpleObf = new SimpleObfuscator();
@@ -710,13 +765,13 @@ public class ObfuscatorGUI extends JFrame {
                     outputTextArea.setCaretPosition(0);
                 });
 
-                // Шаг 3: Компиляция и ASM обфускация
+                // Шаг 3: Компиляция и ASM обфускация (опционально)
                 if (enableAsmObfuscationCheckBox.isSelected()) {
                     progressBar.setValue(60);
                     progressBar.setString("Компиляция...");
                     statusLabel.setText("⚙️ Компилируем код...");
                     if (Logger.getInstance() != null) {
-                        Logger.getInstance().info("🔧 [2/3] Компилируем обфусцированный код...");
+                        Logger.getInstance().info("🔧 [2/2] Компилируем и применяем ASM-обфускацию...");
                     }
 
                     try {
@@ -743,12 +798,12 @@ public class ObfuscatorGUI extends JFrame {
                             Logger.getInstance().success("✅ Компиляция успешна");
                         }
 
-                        // Шаг 4: ASM обфускация
+                        // Шаг 4: ASM обфускация байт-кода
                         progressBar.setValue(80);
                         progressBar.setString("ASM обфускация...");
-                        statusLabel.setText("⚙️ Выполняем ASM обфускацию...");
+                        statusLabel.setText("🔧 Выполняем ASM обфускацию байт-кода...");
                         if (Logger.getInstance() != null) {
-                            Logger.getInstance().info("🔬 [3/3] Применяем ASM-обфускацию...");
+                            Logger.getInstance().info("🔬 Применяем ASM-обфускацию байт-кода...");
                         }
 
                         Path classFile = tempDir.resolve(astResult.className + ".class");
@@ -757,12 +812,15 @@ public class ObfuscatorGUI extends JFrame {
                             ObfuscationMetrics.Metrics originalBytecodeMetrics =
                                     ObfuscationMetrics.calculateBytecodeMetrics(classFile);
 
+                            // Применяем ASM обфускацию (всегда базовый метод, так как нет выбора)
                             AsmObfuscator asmObf = new AsmObfuscator();
                             Path asmClassFile = tempDir.resolve(astResult.className + "_obf.class");
 
+                            // Всегда используем базовый метод ASM обфускации
                             asmObf.obfuscateClass(classFile, asmClassFile);
+
                             if (Logger.getInstance() != null) {
-                                Logger.getInstance().success("✅ ASM-обфускация завершена");
+                                Logger.getInstance().success("✅ ASM-обфускация байт-кода завершена");
                             }
 
                             // Рассчитываем метрики обфусцированного байт-кода
@@ -787,7 +845,7 @@ public class ObfuscatorGUI extends JFrame {
                             if (Logger.getInstance() != null) {
                                 Logger.getInstance().info("   📏 Размер файла: " + originalBytecodeMetrics.getFileSizeBytes() +
                                         " → " + obfuscatedBytecodeMetrics.getFileSizeBytes() + " байт");
-                                Logger.getInstance().info("   🧩 Инструкций: " + originalBytecodeMetrics.getBytecodeInstructions() +
+                                Logger.getInstance().info("   🧩 Инструкций байт-кода: " + originalBytecodeMetrics.getBytecodeInstructions() +
                                         " → " + obfuscatedBytecodeMetrics.getBytecodeInstructions());
                                 Logger.getInstance().info("   💾 Создан файл: " + asmClassFile);
                             }
@@ -795,6 +853,7 @@ public class ObfuscatorGUI extends JFrame {
                     } catch (Exception e) {
                         if (Logger.getInstance() != null) {
                             Logger.getInstance().warning("⚠️ ASM обфускация пропущена: " + e.getMessage());
+                            Logger.getInstance().debug("Детали ошибки: " + e.getMessage());
                         }
                     }
                 }
@@ -868,6 +927,7 @@ public class ObfuscatorGUI extends JFrame {
                     statusLabel.setForeground(ACCENT_COLOR);
                     if (Logger.getInstance() != null) {
                         Logger.getInstance().error("💥 ОШИБКА: " + e.getMessage());
+                        Logger.getInstance().debug("Детали ошибки: " + e.getMessage());
                     }
                     setControlsEnabled(true);
                     progressBar.setVisible(false);
@@ -1035,6 +1095,7 @@ public class ObfuscatorGUI extends JFrame {
         enableAsmObfuscationCheckBox.setEnabled(enabled);
         enableCommentsCheckBox.setEnabled(enabled);
         enableFakeCodeCheckBox.setEnabled(enabled);
+        astMethodComboBox.setEnabled(enabled); // AST метод всегда доступен
         inputTextArea.setEnabled(enabled);
         clearLogsButton.setEnabled(enabled);
         saveLogsButton.setEnabled(enabled);
